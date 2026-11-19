@@ -60,6 +60,28 @@ public final class Features {
     private static final LinkedHashMap<String, Feature> ALL = new LinkedHashMap<>();
     private static boolean loaded = false;
 
+    /** Fonctions qui font bouger le joueur toutes seules : jamais reactivees au lancement du jeu. */
+    private static final Set<String> NOT_SAVED = Set.of("auto_walk", "anti_afk");
+    /** Fonctions qui prennent le controle du joueur : coupees par l'arret d'urgence (K deux fois). */
+    public static final List<String> TAKE_CONTROL = List.of("auto_walk", "anti_afk", "auto_sleep", "auto_fish", "kill_aura", "safe_walk", "auto_sprint");
+
+    /**
+     * Arret d'urgence des fonctions qui bougent le joueur.
+     * @param all false = seulement marche auto / anti-AFK, true = toutes celles de TAKE_CONTROL
+     * @return les noms des fonctions coupees
+     */
+    public static List<String> emergencyOff(boolean all) {
+        List<String> off = new ArrayList<>();
+        for (String id : all ? TAKE_CONTROL : List.copyOf(NOT_SAVED)) {
+            Feature f = get(id);
+            if (f != null && f.enabled) {
+                set(id, false);
+                off.add(f.name);
+            }
+        }
+        return off;
+    }
+
     public static synchronized Collection<Feature> all() {
         init();
         return ALL.values();
@@ -102,7 +124,7 @@ public final class Features {
 
     private static void save() {
         Map<String, Boolean> m = new TreeMap<>();
-        for (Feature f : ALL.values()) m.put(f.id, f.enabled);
+        for (Feature f : ALL.values()) m.put(f.id, f.enabled && !NOT_SAVED.contains(f.id));
         try (Writer w = new FileWriter(file())) {
             new Gson().toJson(m, w);
         } catch (Exception ignored) {}
@@ -116,7 +138,7 @@ public final class Features {
         if (f.exists()) {
             try (Reader r = new FileReader(f)) {
                 Map<String, Boolean> m = new Gson().fromJson(r, new TypeToken<Map<String, Boolean>>() {}.getType());
-                if (m != null) m.forEach((k, v) -> { Feature ft = ALL.get(k); if (ft != null) ft.enabled = v; });
+                if (m != null) m.forEach((k, v) -> { Feature ft = ALL.get(k); if (ft != null && !NOT_SAVED.contains(k)) ft.enabled = v; });
             } catch (Exception ignored) {}
         }
     }
@@ -502,7 +524,10 @@ public final class Features {
             }
         });
         add(new Feature("safe_walk", "Marche securisee", "Deplacement", false, "S'accroupit au bord du vide pour ne pas tomber.") {});
-        add(new Feature("auto_walk", "Marche automatique", "Deplacement", false, "Avance tout seul (pratique pour les longs trajets).") {});
+        add(new Feature("auto_walk", "Marche automatique", "Deplacement", false, "Avance tout seul. S (reculer) ou K pour arreter. Jamais reactivee au lancement.") {
+            @Override
+            public void onEnable() { BotLog.info("Marche automatique : appuie sur S (reculer) ou K pour arreter."); }
+        });
         add(new Feature("anti_afk", "Anti-AFK", "Deplacement", false, "Bouge un peu toutes les minutes pour ne pas etre expulse.") {
             @Override
             public void tick() {

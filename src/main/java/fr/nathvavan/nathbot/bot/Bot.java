@@ -77,6 +77,7 @@ public final class Bot {
 
     public void stop() {
         boolean had = task != null;
+        if (Features.isOn("auto_walk")) Features.set("auto_walk", false);
         stopTaskOnly();
         releaseKeys();
         in.reset();

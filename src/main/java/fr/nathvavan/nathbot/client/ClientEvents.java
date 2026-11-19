@@ -30,6 +30,8 @@ public final class ClientEvents {
     private ClientEvents() {}
 
     private static boolean welcomed = false;
+    private static long lastStopPress = 0;
+    private static Object lastLevel = null;
     private static boolean scriptsBroken = false;
 
     /** Messages du chat : transmis aux scripts (bot.on("chat", ...)). */
@@ -51,6 +53,11 @@ public final class ClientEvents {
         if (mc.player != null && !welcomed && mc.player.tickCount > 60) {
             welcomed = true;
             BotLog.info("NathBot pret ! Touche " + Keys.PANEL.getTranslatedKeyMessage().getString() + " = panneau, '/nb aide' = commandes, site : " + WebServer.url());
+        }
+        // changement de monde / deconnexion : on ne repart jamais en marchant tout seul
+        if (mc.level != lastLevel) {
+            lastLevel = mc.level;
+            Features.emergencyOff(false);
         }
         handleKeys(mc);
         fr.nathvavan.nathbot.util.DropIndex.tick();
@@ -96,7 +103,17 @@ public final class ClientEvents {
             if (mc.screen == null) mc.setScreen(new PanelScreen());
             if (BotConfig.get(BotConfig.WEB_OPEN_FROM_PANEL, false)) WebServer.openInBrowser();
         }
-        while (Keys.STOP.consumeClick()) Bot.I.stop();
+        while (Keys.STOP.consumeClick()) {
+            // K = arret : le bot ET la marche auto. K deux fois en moins d'une seconde = tout ce qui bouge le joueur.
+            long now = System.currentTimeMillis();
+            boolean twice = now - lastStopPress < 1000;
+            lastStopPress = now;
+            Bot.I.stop();
+            Bot.I.releaseKeys();
+            java.util.List<String> off = Features.emergencyOff(twice);
+            if (!off.isEmpty()) BotLog.warn("Arret : " + String.join(", ", off) + " coupe(s).");
+            else if (!twice) BotLog.info("Arret. (K deux fois = couper aussi toutes les fonctions qui bougent le joueur)");
+        }
         while (Keys.PAUSE.consumeClick()) {
             if (fr.nathvavan.nathbot.dev.DevMode.locked()) { fr.nathvavan.nathbot.dev.DevMode.refuse(); continue; }
             Bot.I.paused = !Bot.I.paused;
@@ -140,9 +157,15 @@ public final class ClientEvents {
             in.jumping = false;
             return;
         }
-        if (Features.isOn("auto_walk") && mc.screen == null) {
-            in.forwardImpulse = 1;
-            in.up = true;
+        if (Features.isOn("auto_walk")) {
+            // reculer, s'accroupir ou mourir = on arrete de marcher tout seul
+            if (mc.options.keyDown.isDown() || mc.options.keyShift.isDown() || !mc.player.isAlive()) {
+                Features.set("auto_walk", false);
+                BotLog.info("Marche automatique arretee.");
+            } else if (mc.screen == null) {
+                in.forwardImpulse = 1;
+                in.up = true;
+            }
         }
         if (Features.isOn("safe_walk") && mc.player.onGround() && !in.jumping && (in.forwardImpulse != 0 || in.leftImpulse != 0)) {
             LocalPlayer p = mc.player;

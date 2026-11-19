@@ -42,7 +42,8 @@ public final class Commands {
 
     public static final List<Help> HELP = List.of(
             new Help("aide", "Liste des commandes", "General"),
-            new Help("stop", "Arreter le bot", "General"),
+            new Help("stop", "Arreter le bot (et la marche automatique)", "General"),
+            new Help("urgence", "Tout arreter : bot + toutes les fonctions qui bougent le joueur (= K deux fois)", "General"),
             new Help("pause / reprendre", "Mettre en pause / reprendre la tache", "General"),
             new Help("etat", "Ce que fait le bot", "General"),
             new Help("web", "Ouvrir le panneau web dans le navigateur", "General"),
@@ -236,6 +237,12 @@ public final class Commands {
             switch (c) {
                 case "aide", "help", "?" -> help();
                 case "stop", "arret", "arreter", "cancel" -> Bot.I.stop();
+                case "urgence", "panique", "panic" -> {
+                    Bot.I.stop();
+                    Bot.I.releaseKeys();
+                    List<String> off = Features.emergencyOff(true);
+                    BotLog.warn("Arret d'urgence" + (off.isEmpty() ? "." : " : " + String.join(", ", off) + " coupe(s)."));
+                }
                 case "pause" -> { Bot.I.paused = true; BotLog.info("Pause."); }
                 case "reprendre", "resume", "continuer" -> {
                     if (fr.nathvavan.nathbot.dev.DevMode.locked()) { fr.nathvavan.nathbot.dev.DevMode.refuse(); return; }

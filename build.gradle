@@ -2,6 +2,7 @@ plugins {
     id 'eclipse'
     id 'idea'
     id 'net.minecraftforge.gradle' version '[6.0.24,6.2)'
+    id 'com.gradleup.shadow' version '8.3.5'
 }
 
 version = mod_version
@@ -27,10 +28,20 @@ minecraft {
 }
 
 repositories {
+    mavenCentral()
+}
+
+configurations {
+    // bibliotheques copiees DANS le .jar du mod (renommees pour ne gener aucun autre mod)
+    shade
+    implementation.extendsFrom shade
 }
 
 dependencies {
     minecraft 'net.minecraftforge:forge:1.20.1-47.3.0'
+    // moteur JavaScript pour les scripts en direct (WorldEdit en embarque aussi une copie :
+    // on renomme la notre en fr.nathvavan.nathbot.libs.rhino pour eviter tout conflit)
+    shade 'org.mozilla:rhino:1.7.15'
 }
 
 tasks.withType(JavaCompile).configureEach {
@@ -57,4 +68,19 @@ jar {
         ])
     }
     finalizedBy 'reobfJar'
+    archiveClassifier = 'slim'
 }
+
+shadowJar {
+    archiveClassifier = ''
+    configurations = [project.configurations.shade]
+    relocate 'org.mozilla', 'fr.nathvavan.nathbot.libs.rhino'
+    exclude 'module-info.class', 'META-INF/maven/**', 'META-INF/versions/**'
+    finalizedBy 'reobfShadowJar'
+}
+
+reobf {
+    shadowJar {}
+}
+
+tasks.named('assemble') { dependsOn 'shadowJar' }

@@ -100,6 +100,7 @@ td,th{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left}
   <button id="btnPause" onclick="cmd(S.paused?'reprendre':'pause')">Pause</button>
   <button class="bad" onclick="cmd('stop')">Arreter</button>
 </header>
+<div id="devBanner" style="display:none;padding:10px 16px;background:#3b2f14;color:var(--warn);border-bottom:1px solid #6b5420;font-weight:600"></div>
 <div class="layout">
 <nav id="nav">
   <button data-t="home" class="act">Accueil</button>
@@ -332,6 +333,8 @@ async function refresh(){
   let s;try{s=await j('/api/status')}catch(e){$('status').innerHTML='<span class="dot"></span><b>Minecraft non connecte</b>';return}
   S.paused=s.paused;
   $('btnPause').textContent=s.paused?'Reprendre':'Pause';
+  $('devBanner').style.display=s.devLock?'block':'none';
+  if(s.devLock)$('devBanner').textContent='Claude est en train de coder le bot ('+s.devReason+'). Il est en pause et ne peut pas etre relance. Un message "Le bot est repret !" apparaitra dans le chat a la fin.';
   $('dot').className='dot'+(s.active?(s.paused?' pause':' on'):'');
   $('status').innerHTML=`<span class="dot ${s.active?(s.paused?'pause':'on'):''}" id="dot"></span><b>${esc(s.status)}</b>`;
   $('endStatus').textContent=s.status;

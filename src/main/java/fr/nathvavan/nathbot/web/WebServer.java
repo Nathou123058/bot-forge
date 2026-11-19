@@ -132,6 +132,7 @@ public final class WebServer {
                 send(out, 403, "text/plain", "Missing header".getBytes(StandardCharsets.UTF_8));
                 return;
             }
+            query.put("__dev", headers.getOrDefault("x-nathbot-dev", ""));
             Api.Response r = Api.route(method, path, query, new String(body, StandardCharsets.UTF_8));
             send(out, r.code(), r.type(), r.body());
         } catch (Exception e) {

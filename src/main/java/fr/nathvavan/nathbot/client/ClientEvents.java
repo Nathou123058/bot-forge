@@ -30,6 +30,16 @@ public final class ClientEvents {
     private ClientEvents() {}
 
     private static boolean welcomed = false;
+    private static boolean scriptsBroken = false;
+
+    /** Messages du chat : transmis aux scripts (bot.on("chat", ...)). */
+    @SubscribeEvent
+    public static void onChat(ClientChatReceivedEvent e) {
+        if (scriptsBroken) return;
+        try {
+            fr.nathvavan.nathbot.dev.Scripts.onChat(e.getMessage().getString());
+        } catch (Throwable ignored) {}
+    }
     private static boolean socialKeyFixed = false;
 
     @SubscribeEvent
@@ -45,6 +55,16 @@ public final class ClientEvents {
         handleKeys(mc);
         fr.nathvavan.nathbot.util.DropIndex.tick();
         Bot.I.tick();
+        if (!scriptsBroken) {
+            try {
+                fr.nathvavan.nathbot.dev.Scripts.tick();
+            } catch (LinkageError err) {
+                scriptsBroken = true;
+                BotLog.error("Moteur de scripts indisponible : " + err);
+            } catch (Throwable t) {
+                fr.nathvavan.nathbot.NathBot.LOG.error("Erreur scripts", t);
+            }
+        }
     }
 
     /** A chaque image : la camera du bot glisse en douceur vers sa cible. */
@@ -78,6 +98,7 @@ public final class ClientEvents {
         }
         while (Keys.STOP.consumeClick()) Bot.I.stop();
         while (Keys.PAUSE.consumeClick()) {
+            if (fr.nathvavan.nathbot.dev.DevMode.locked()) { fr.nathvavan.nathbot.dev.DevMode.refuse(); continue; }
             Bot.I.paused = !Bot.I.paused;
             BotLog.info(Bot.I.paused ? "Pause." : "Reprise.");
         }

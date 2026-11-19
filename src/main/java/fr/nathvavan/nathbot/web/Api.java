@@ -55,8 +55,13 @@ final class Api {
     }
 
     static Response route(String method, String path, Map<String, String> q, String body) throws Exception {
+        if (path.startsWith("/api/dev/")) return DevApi.route(method, path, q, body);
+        if (path.startsWith("/web/")) return DevApi.webFile(path.substring(5));
         switch (path) {
             case "/", "/index.html" -> {
+                // une copie modifiee dans .minecraft/nathbot/web/index.html remplace celle du mod (modifiable en direct)
+                java.io.File custom = new java.io.File(fr.nathvavan.nathbot.dev.DevMode.dir(), "web/index.html");
+                if (custom.isFile()) return new Response(200, "text/html; charset=utf-8", java.nio.file.Files.readAllBytes(custom.toPath()));
                 try (InputStream in = NathBot.class.getResourceAsStream("/assets/nathbot/web/index.html")) {
                     if (in == null) return Response.text(404, "index.html introuvable");
                     return new Response(200, "text/html; charset=utf-8", in.readAllBytes());
@@ -124,6 +129,8 @@ final class Api {
         o.addProperty("active", Bot.I.task() != null);
         o.addProperty("paused", Bot.I.paused);
         o.addProperty("logCounter", BotLog.counter());
+        o.addProperty("devLock", fr.nathvavan.nathbot.dev.DevMode.locked());
+        o.addProperty("devReason", fr.nathvavan.nathbot.dev.DevMode.reason());
         if (p == null || mc.level == null) return o;
         o.addProperty("name", p.getGameProfile().getName());
         o.addProperty("x", p.getX());

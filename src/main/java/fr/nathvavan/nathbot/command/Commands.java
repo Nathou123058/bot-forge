@@ -85,7 +85,9 @@ public final class Commands {
             new Help("fonctions", "Liste des fonctions activables", "Reglages"),
             new Help("activer <fonction> / desactiver <fonction>", "Activer ou couper une fonction", "Reglages"),
             new Help("regler <option> <valeur>", "Changer un reglage (casser, poser, chute, sprint, legit, commandes)", "Reglages"),
-            new Help("stats", "Statistiques de la session", "Divers")
+            new Help("stats", "Statistiques de la session", "Divers"),
+            new Help("scripts [recharger]", "Scripts JavaScript du dossier nathbot/scripts (recharges en direct)", "Developpement"),
+            new Help("dev [forcer]", "Etat du mode developpement / debloquer le bot en urgence", "Developpement")
     );
 
     private static final Map<String, String> ITEM_ALIASES = new HashMap<>();
@@ -235,7 +237,30 @@ public final class Commands {
                 case "aide", "help", "?" -> help();
                 case "stop", "arret", "arreter", "cancel" -> Bot.I.stop();
                 case "pause" -> { Bot.I.paused = true; BotLog.info("Pause."); }
-                case "reprendre", "resume", "continuer" -> { Bot.I.paused = false; BotLog.info("Reprise."); }
+                case "reprendre", "resume", "continuer" -> {
+                    if (fr.nathvavan.nathbot.dev.DevMode.locked()) { fr.nathvavan.nathbot.dev.DevMode.refuse(); return; }
+                    Bot.I.paused = false;
+                    BotLog.info("Reprise.");
+                }
+                case "scripts" -> {
+                    if (a.length > 1 && a[1].startsWith("rech")) BotLog.ok(fr.nathvavan.nathbot.dev.Scripts.reloadAll() + " script(s) recharge(s).");
+                    var l = fr.nathvavan.nathbot.dev.Scripts.info();
+                    if (l.isEmpty()) BotLog.info("Aucun script. Dossier : " + fr.nathvavan.nathbot.dev.Scripts.dir().getPath());
+                    for (var s : l) {
+                        if (s.ok()) BotLog.ok(s.file() + " : ok (" + s.commands() + " commande(s), " + s.handlers() + " evenement(s))");
+                        else BotLog.error(s.file() + " : " + s.error());
+                    }
+                    for (String[] c : fr.nathvavan.nathbot.dev.Scripts.commands()) BotLog.info("/nb " + c[0] + " : " + c[1] + " (" + c[2] + ")");
+                }
+                case "dev" -> {
+                    if (a.length > 1 && a[1].equalsIgnoreCase("forcer")) {
+                        fr.nathvavan.nathbot.dev.DevMode.unlock("(debloque a la main)");
+                    } else {
+                        BotLog.info(fr.nathvavan.nathbot.dev.DevMode.locked()
+                                ? "Claude code le bot : " + fr.nathvavan.nathbot.dev.DevMode.reason() + " (encore " + fr.nathvavan.nathbot.dev.DevMode.secondsLeft() / 60 + " min max). En cas d'urgence : /nb dev forcer"
+                                : "Mode developpement libre. Scripts : " + fr.nathvavan.nathbot.dev.Scripts.dir().getPath());
+                    }
+                }
                 case "etat", "status" -> BotLog.info(Bot.I.statusText());
                 case "web", "site" -> WebServer.openInBrowser();
                 case "goto", "aller", "va" -> {
@@ -397,7 +422,15 @@ public final class Commands {
                     BotLog.info("Blocs mines " + s.blocksMined + ", distance " + (int) s.distance + "m, kills " + s.kills + ", morts " + s.deaths
                             + ", taches " + s.tasksDone + "/" + s.tasksStarted + ", temps " + s.seconds() / 60 + " min");
                 }
-                default -> BotLog.error("Commande inconnue : " + c + " (tape 'aide')");
+                default -> {
+                    boolean done;
+                    try {
+                        done = fr.nathvavan.nathbot.dev.Scripts.runCommand(c, Arrays.copyOfRange(a, 1, a.length));
+                    } catch (LinkageError e) {
+                        done = false;
+                    }
+                    if (!done) BotLog.error("Commande inconnue : " + c + " (tape 'aide')");
+                }
             }
         } catch (Exception e) {
             BotLog.error("Erreur : " + e.getMessage());

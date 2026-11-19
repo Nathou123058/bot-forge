@@ -47,11 +47,16 @@ public final class Bot {
     public boolean isActive() { return task != null && !paused; }
 
     public String statusText() {
-        if (task == null) return "Inactif";
-        return (paused ? "[PAUSE] " : "") + task.describe();
+        String dev = fr.nathvavan.nathbot.dev.DevMode.locked() ? "[Claude code le bot] " : "";
+        if (task == null) return dev + "Inactif";
+        return dev + (paused ? "[PAUSE] " : "") + task.describe();
     }
 
     public void start(Task t) {
+        if (fr.nathvavan.nathbot.dev.DevMode.locked() && !fr.nathvavan.nathbot.dev.DevMode.bypass) {
+            fr.nathvavan.nathbot.dev.DevMode.refuse();
+            return;
+        }
         stopTaskOnly();
         task = t;
         paused = false;
@@ -100,6 +105,7 @@ public final class Bot {
             if (task != null) stop();
             return;
         }
+        fr.nathvavan.nathbot.dev.DevMode.tick();
         attackRequested = false;
         useRequested = false;
         featureBusy = false;

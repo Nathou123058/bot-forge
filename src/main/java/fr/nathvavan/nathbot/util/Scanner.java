@@ -58,6 +58,27 @@ public final class Scanner {
         return false;
     }
 
+    /** Y a-t-il au moins un bloc de ce type dans les chunks charges ? (s'arrete au premier trouve) */
+    public static boolean any(Predicate<BlockState> pred, BlockPos center, int chunkRadius) {
+        Level level = Minecraft.getInstance().level;
+        if (level == null) return false;
+        int ccx = center.getX() >> 4, ccz = center.getZ() >> 4;
+        for (int cx = ccx - chunkRadius; cx <= ccx + chunkRadius; cx++) {
+            for (int cz = ccz - chunkRadius; cz <= ccz + chunkRadius; cz++) {
+                LevelChunk ch = level.getChunkSource().getChunkNow(cx, cz);
+                if (ch == null) continue;
+                for (LevelChunkSection sec : ch.getSections()) {
+                    if (sec == null || sec.hasOnlyAir() || !sec.maybeHas(pred)) continue;
+                    for (int y = 0; y < 16; y++)
+                        for (int z = 0; z < 16; z++)
+                            for (int x = 0; x < 16; x++)
+                                if (pred.test(sec.getBlockState(x, y, z))) return true;
+                }
+            }
+        }
+        return false;
+    }
+
     public static BlockPos nearest(Predicate<BlockState> pred, BlockPos center, int chunkRadius) {
         List<BlockPos> l = find(pred, center, chunkRadius, 1, false);
         return l.isEmpty() ? null : l.get(0);

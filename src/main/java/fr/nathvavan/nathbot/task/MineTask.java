@@ -35,6 +35,8 @@ public class MineTask extends Task {
     private int branchSegments = 0;
     private boolean exploring = false;
     private int noTargetFails = 0;
+    private int exploreLimit = 0;
+    private int exploreStart = -1;
 
     public MineTask(Targets.Spec spec, int count) {
         this(spec.blocks(), count, spec.label(), spec.bestY());
@@ -52,6 +54,15 @@ public class MineTask extends Task {
         this.until = s;
         return this;
     }
+
+    /** Abandonner si on explore plus de N ticks sans rien trouver (0 = jamais). */
+    public MineTask exploreLimit(int ticks) {
+        this.exploreLimit = ticks;
+        return this;
+    }
+
+    /** Nombre de blocs mines jusqu'ici. */
+    public int mined() { return mined; }
 
     @Override
     public String name() { return "Miner " + label + " (" + mined + "/" + (count > 0 ? count : "?") + ")"; }
@@ -103,6 +114,7 @@ public class MineTask extends Task {
         known.removeIf(p -> !isTarget(p) || blacklist.contains(p.asLong()));
         if (!known.isEmpty()) {
             exploring = false;
+            exploreStart = -1;
             List<Goal> goals = new ArrayList<>();
             for (int i = 0; i < Math.min(6, known.size()); i++) goals.add(new Goal.TwoBlocks(known.get(i)));
             GotoTask g = new GotoTask(new Goal.Any(goals), 3);
@@ -113,6 +125,11 @@ public class MineTask extends Task {
         }
         // rien en vue : on explore
         exploring = true;
+        if (exploreStart < 0) exploreStart = ticks;
+        if (exploreLimit > 0 && ticks - exploreStart > exploreLimit) {
+            BotLog.warn("Pas trouve de " + label + " dans le coin, j'abandonne cette piste.");
+            return Status.FAILED;
+        }
         BlockPos feet = Bot.feet();
         Integer y = bestY;
         if (y != null && mc.level.dimension() != Level.OVERWORLD && !(label.contains("quartz") || label.contains("debris") || label.contains("netherite"))) y = null;

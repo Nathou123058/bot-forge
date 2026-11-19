@@ -43,7 +43,14 @@ public final class ClientEvents {
             BotLog.info("NathBot pret ! Touche " + Keys.PANEL.getTranslatedKeyMessage().getString() + " = panneau, '/nb aide' = commandes, site : " + WebServer.url());
         }
         handleKeys(mc);
+        fr.nathvavan.nathbot.util.DropIndex.tick();
         Bot.I.tick();
+    }
+
+    /** Le serveur a (re)envoye ses recettes : on reconstruira l'index. */
+    @SubscribeEvent
+    public static void onRecipes(RecipesUpdatedEvent e) {
+        fr.nathvavan.nathbot.util.RecipeBook.invalidate();
     }
 
     /** La touche P sert aussi a "Interactions sociales" en vanilla : on libere P pour le panneau. */

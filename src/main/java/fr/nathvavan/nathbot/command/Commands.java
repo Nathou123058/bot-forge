@@ -58,7 +58,8 @@ public final class Commands {
             new Help("diamants [n]", "Aller chercher des diamants tout seul", "Minage"),
             new Help("miner <bloc> [n]", "Miner un bloc (fer, or, bois, obsidian...)", "Minage"),
             new Help("recolter <objet> [n]", "Obtenir un objet (mine/fabrique/cuit)", "Minage"),
-            new Help("fabriquer <objet> [n]", "Fabriquer a l'etabli", "Fabrication"),
+            new Help("fabriquer <objet> [n]", "Fabriquer tout seul (va chercher les ingredients, recettes des mods comprises)", "Fabrication"),
+            new Help("recette <objet> [n]", "Expliquer comment le bot obtiendrait un objet", "Fabrication"),
             new Help("cuire <objet> [n]", "Cuire au four (ex: cuire iron_ingot 10)", "Fabrication"),
             new Help("construire <nom> [rotation 0-3]", "Construire devant toi", "Construction"),
             new Help("constructions", "Liste des constructions", "Construction"),
@@ -104,8 +105,42 @@ public final class Commands {
         String n = s.toLowerCase(Locale.ROOT).replace("minecraft:", "");
         n = ITEM_ALIASES.getOrDefault(n, n);
         ResourceLocation rl = ResourceLocation.tryParse(n.contains(":") ? n : "minecraft:" + n);
-        if (rl == null || !BuiltInRegistries.ITEM.containsKey(rl)) return null;
-        return BuiltInRegistries.ITEM.get(rl);
+        if (rl != null && BuiltInRegistries.ITEM.containsKey(rl)) return BuiltInRegistries.ITEM.get(rl);
+        return byName(s);
+    }
+
+    private static Map<String, Item> namesCache;
+    private static String namesLang;
+
+    private static String norm(String s) {
+        String x = java.text.Normalizer.normalize(s.toLowerCase(Locale.ROOT), java.text.Normalizer.Form.NFD).replaceAll("\\p{M}", "");
+        return x.replaceAll("[^a-z0-9]+", "_").replaceAll("^_|_$", "");
+    }
+
+    /** Retrouve un objet par son nom affiche en jeu ("planches de bambou", "bambou"...), mods compris. */
+    private static Item byName(String raw) {
+        String lang = Minecraft.getInstance().options.languageCode;
+        if (namesCache == null || !lang.equals(namesLang)) {
+            Map<String, Item> m = new HashMap<>();
+            for (Item i : BuiltInRegistries.ITEM) {
+                try {
+                    m.putIfAbsent(norm(i.getDescription().getString()), i);
+                    m.putIfAbsent(norm(BuiltInRegistries.ITEM.getKey(i).getPath()), i);
+                } catch (Throwable ignored) {}
+            }
+            namesCache = m;
+            namesLang = lang;
+        }
+        String k = norm(raw);
+        Item exact = namesCache.get(k);
+        if (exact != null) return exact;
+        // sinon : le nom le plus court qui contient le mot (ex : "bambou" -> Bambou)
+        Item best = null;
+        int bl = Integer.MAX_VALUE;
+        for (Map.Entry<String, Item> e : namesCache.entrySet()) {
+            if (e.getKey().contains(k) && e.getKey().length() < bl) { bl = e.getKey().length(); best = e.getValue(); }
+        }
+        return best;
     }
 
     private static int intArg(String[] a, int i, int def) {
@@ -237,7 +272,14 @@ public final class Commands {
                 case "fabriquer", "craft" -> {
                     Item it = a.length > 1 ? parseItem(a[1]) : null;
                     if (it == null) { BotLog.error("Objet inconnu."); return; }
-                    Bot.I.start(new ContainerTasks.Craft(it, Inv.count(it) + intArg(a, 2, 1)));
+                    Bot.I.start(new GatherTask(it, Inv.count(it) + intArg(a, 2, 1)));
+                }
+                case "recette", "recipe", "comment" -> {
+                    Item it = a.length > 1 ? parseItem(a[1]) : null;
+                    if (it == null) { BotLog.error("Objet inconnu."); return; }
+                    int n = intArg(a, 2, 1);
+                    BotLog.info("Pour obtenir " + n + "x " + it.getDescription().getString() + " :");
+                    for (String l : new Planner().explain(it, n)) BotLog.info(l);
                 }
                 case "cuire", "smelt" -> {
                     Item it = a.length > 1 ? parseItem(a[1]) : null;

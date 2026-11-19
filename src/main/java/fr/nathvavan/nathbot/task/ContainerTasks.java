@@ -129,9 +129,18 @@ public final class ContainerTasks {
         private int wait = 0;
         private int retries = 0;
         private CraftingRecipe recipe;
+        private Item item;
+        private CraftingRecipe preferred;
 
         public Craft(Item item, int targetTotal) {
             this(s -> s.is(item), targetTotal, item.getDescription().getString());
+            this.item = item;
+        }
+
+        /** Fabriquer avec une recette precise (choisie par le planificateur). */
+        public Craft(Item item, int targetTotal, CraftingRecipe preferred) {
+            this(item, targetTotal);
+            this.preferred = preferred;
         }
 
         public Craft(Predicate<ItemStack> result, int targetTotal, String label) {
@@ -198,8 +207,11 @@ public final class ContainerTasks {
         }
 
         private CraftingRecipe choose() {
+            if (preferred != null && craftable(preferred) > 0) return preferred;
             CraftingRecipe best = null;
-            for (CraftingRecipe r : mc.level.getRecipeManager().getAllRecipesFor(RecipeType.CRAFTING)) {
+            Iterable<CraftingRecipe> all = item != null ? fr.nathvavan.nathbot.util.RecipeBook.craftingFor(item)
+                    : mc.level.getRecipeManager().getAllRecipesFor(RecipeType.CRAFTING);
+            for (CraftingRecipe r : all) {
                 if (r.isSpecial() || !r.canCraftInDimensions(3, 3)) continue;
                 ItemStack out = r.getResultItem(ra());
                 if (out.isEmpty() || !result.test(out)) continue;
@@ -249,7 +261,7 @@ public final class ContainerTasks {
                         return Status.RUNNING;
                     }
                     if (++retries > 3) return Status.FAILED;
-                    run(new Craft(Items.CRAFTING_TABLE, 1));
+                    run(new GatherTask(Items.CRAFTING_TABLE, 1));
                     return Status.RUNNING;
                 }
                 run(new Open(t, CraftingMenu.class));
@@ -325,6 +337,7 @@ public final class ContainerTasks {
         private final int target;
         private int wait = 0;
         private int idle = 0;
+        private int furnaceTries = 0;
 
         public Smelt(Predicate<ItemStack> input, Item output, int target) {
             this.input = input;
@@ -354,12 +367,12 @@ public final class ContainerTasks {
                         run(new PlaceUtility(Items.FURNACE, Blocks.FURNACE));
                         return Status.RUNNING;
                     }
-                    if (Inv.count(s -> s.is(Items.COBBLESTONE) || s.is(Items.COBBLED_DEEPSLATE) || s.is(Items.BLACKSTONE)) >= 8) {
-                        run(new Craft(Items.FURNACE, 1));
-                        return Status.RUNNING;
+                    if (++furnaceTries > 3) {
+                        BotLog.warn("Pas de four et impossible d'en fabriquer un.");
+                        return Status.FAILED;
                     }
-                    BotLog.warn("Pas de four et pas assez de pierre (8).");
-                    return Status.FAILED;
+                    run(new GatherTask(Items.FURNACE, 1));
+                    return Status.RUNNING;
                 }
                 run(new Open(f, AbstractFurnaceMenu.class));
                 return Status.RUNNING;
@@ -425,6 +438,118 @@ public final class ContainerTasks {
             }
             status = "cuisson...";
             if (ticks > 20 * 12 * Math.max(needed, 1) + 1200) return Status.FAILED;
+            return Status.RUNNING;
+        }
+
+        @Override
+        protected void onStop() {
+            closeIfOpen();
+        }
+    }
+
+    // ===================================================================== tailleur de pierre
+
+    public static class Stonecut extends Task {
+        private final Predicate<ItemStack> input;
+        private final Item output;
+        private final int target;
+        private int wait = 0;
+        private int retries = 0;
+        private int stationTries = 0;
+
+        public Stonecut(Predicate<ItemStack> input, Item output, int target) {
+            this.input = input;
+            this.output = output;
+            this.target = target;
+        }
+
+        @Override
+        public String name() { return "Tailler " + output.getDescription().getString() + " (" + Inv.count(output) + "/" + target + ")"; }
+
+        @Override
+        protected Status update() {
+            if (Inv.count(output) >= target) {
+                closeIfOpen();
+                return Status.SUCCESS;
+            }
+            AbstractContainerMenu menu = mc.player.containerMenu;
+            if (!(menu instanceof StonecutterMenu sm)) {
+                closeIfOpen();
+                BlockPos t = Scanner.nearest(s -> s.is(Blocks.STONECUTTER), Bot.feet(), 2);
+                if (t == null || t.distSqr(Bot.feet()) > 24 * 24) {
+                    if (Inv.has(Items.STONECUTTER)) {
+                        run(new PlaceUtility(Items.STONECUTTER, Blocks.STONECUTTER));
+                        return Status.RUNNING;
+                    }
+                    if (++stationTries > 3) return Status.FAILED;
+                    run(new GatherTask(Items.STONECUTTER, 1));
+                    return Status.RUNNING;
+                }
+                run(new Open(t, StonecutterMenu.class));
+                return Status.RUNNING;
+            }
+            if (wait > 0) {
+                wait--;
+                return Status.RUNNING;
+            }
+            if (++retries > 200) return Status.FAILED;
+            ItemStack res = sm.getSlot(1).getItem();
+            if (!res.isEmpty() && res.is(output)) {
+                // on prend juste ce qu'il faut (pas tout le stack)
+                int need = target - Inv.count(output);
+                int picks = Math.max(1, (int) Math.ceil(need / (double) res.getCount()));
+                for (int i = 0; i < picks && !sm.getSlot(1).getItem().isEmpty(); i++) {
+                    ItemStack carried = sm.getCarried();
+                    if (!carried.isEmpty() && carried.getCount() + res.getCount() > carried.getMaxStackSize()) break;
+                    Inv.click(1, 0, ClickType.PICKUP);
+                }
+                ItemStack carried = sm.getCarried();
+                int dest = -1;
+                for (int i = 2; i < sm.slots.size() && !carried.isEmpty(); i++) {
+                    ItemStack st = sm.getSlot(i).getItem();
+                    if (st.isEmpty() || ItemStack.isSameItemSameTags(st, carried) && st.getCount() + carried.getCount() <= st.getMaxStackSize()) {
+                        dest = i;
+                        break;
+                    }
+                }
+                if (dest >= 0) Inv.click(dest, 0, ClickType.PICKUP);
+                wait = 2;
+                return Status.RUNNING;
+            }
+            ItemStack in = sm.getSlot(0).getItem();
+            if (in.isEmpty() || !input.test(in)) {
+                if (!in.isEmpty()) {
+                    Inv.click(0, 0, ClickType.QUICK_MOVE);
+                    wait = 2;
+                    return Status.RUNNING;
+                }
+                int src = -1;
+                for (int i = 2; i < sm.slots.size(); i++) {
+                    ItemStack st = sm.getSlot(i).getItem();
+                    if (!st.isEmpty() && input.test(st)) { src = i; break; }
+                }
+                if (src < 0) {
+                    BotLog.warn("Plus rien a tailler pour " + output.getDescription().getString());
+                    closeIfOpen();
+                    return Status.FAILED;
+                }
+                Inv.click(src, 0, ClickType.PICKUP);
+                Inv.click(0, 0, ClickType.PICKUP);
+                if (!sm.getCarried().isEmpty()) Inv.click(src, 0, ClickType.PICKUP);
+                wait = 3;
+                return Status.RUNNING;
+            }
+            List<StonecutterRecipe> recipes = sm.getRecipes();
+            for (int i = 0; i < recipes.size(); i++) {
+                if (recipes.get(i).getResultItem(mc.level.registryAccess()).is(output)) {
+                    if (sm.getSelectedRecipeIndex() != i) {
+                        sm.clickMenuButton(mc.player, i);
+                        mc.gameMode.handleInventoryButtonClick(sm.containerId, i);
+                        wait = 3;
+                    }
+                    return Status.RUNNING;
+                }
+            }
             return Status.RUNNING;
         }
 

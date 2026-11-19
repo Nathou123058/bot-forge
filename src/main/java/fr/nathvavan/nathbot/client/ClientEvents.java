@@ -47,6 +47,12 @@ public final class ClientEvents {
         Bot.I.tick();
     }
 
+    /** A chaque image : la camera du bot glisse en douceur vers sa cible. */
+    @SubscribeEvent
+    public static void onRenderTick(TickEvent.RenderTickEvent e) {
+        if (e.phase == TickEvent.Phase.START) fr.nathvavan.nathbot.util.Rot.frame();
+    }
+
     /** Le serveur a (re)envoye ses recettes : on reconstruira l'index. */
     @SubscribeEvent
     public static void onRecipes(RecipesUpdatedEvent e) {

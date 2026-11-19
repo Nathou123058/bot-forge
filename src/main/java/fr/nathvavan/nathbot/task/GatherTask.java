@@ -198,6 +198,16 @@ public class GatherTask extends Task {
         // Cas general : le planificateur remonte toutes les recettes connues (vanilla + mods)
         Planner.Plan p = new Planner(failed).plan(item);
         current = p;
+        if (p.way() == Planner.Way.RECIPE) {
+            StringBuilder sb = new StringBuilder();
+            for (Map.Entry<Ingredient, Integer> e : RecipeBook.grouped(p.source().ingredients())) {
+                if (sb.length() > 0) sb.append(", ");
+                sb.append(e.getValue()).append("x ").append(RecipeBook.label(e.getKey()));
+            }
+            fr.nathvavan.nathbot.util.Brain.think("recette", "Pour " + label + " : " + p.source().describe() + " avec " + sb + ".");
+        } else if (p.ok()) {
+            fr.nathvavan.nathbot.util.Brain.think("recette", "Pour " + label + " : je casse des blocs" + (p.nearby() ? " (il y en a autour)." : " (il faut en trouver)."));
+        }
         switch (p.way()) {
             case MINE, MINE_SPECIAL -> {
                 if (p.tool() != null && Planner.toolNeeded(p.blocks().iterator().next().defaultBlockState()) != null) {

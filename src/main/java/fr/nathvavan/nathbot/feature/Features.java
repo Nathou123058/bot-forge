@@ -412,6 +412,31 @@ public final class Features {
                 }
             }
         });
+        add(new Feature("smart_inventory", "Inventaire intelligent", "Bot", true,
+                "Quand le bot travaille : regroupe les piles, jette le moins utile si c'est plein, range la barre rapide (epee, pioche, hache, pelle, blocs, nourriture).") {
+            @Override
+            public void tick() { fr.nathvavan.nathbot.util.InvManager.tick(); }
+        });
+        add(new Feature("show_inventory", "Voir le bot ranger", "Bot", true, "Ouvre vraiment l'inventaire a l'ecran pendant que le bot range.") {});
+        add(new Feature("anti_drown", "Ne pas se noyer", "Survie", true, "Quand le bot travaille sous l'eau, il remonte respirer avant de manquer d'air.") {
+            private boolean up = false;
+
+            @Override
+            public void tick() {
+                LocalPlayer p = mc.player;
+                if (Bot.I.task() == null || Bot.I.paused || p.isPassenger()) { up = false; return; }
+                if (p.isUnderWater() && p.getAirSupply() < 110 && !up) {
+                    up = true;
+                    fr.nathvavan.nathbot.util.Brain.think("eau", "Plus beaucoup d'air : je remonte respirer.");
+                }
+                if (up && (p.getAirSupply() >= p.getMaxAirSupply() - 10 || !p.isInWater())) up = false;
+                if (up) {
+                    Bot.I.in.active = true;
+                    Bot.I.in.jump = true;
+                }
+            }
+        });
+        add(new Feature("auto_boat", "Bateau automatique", "Deplacement", true, "Pour traverser beaucoup d'eau, le bot fabrique un bateau, navigue puis le recupere.") {});
         add(new Feature("no_pause", "Pas de pause hors focus", "Bot", true, "Le jeu ne se met pas en pause quand tu vas sur le site web.") {
             @Override
             public void tick() { mc.options.pauseOnLostFocus = false; }

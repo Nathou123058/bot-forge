@@ -70,6 +70,20 @@ td,th{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left}
 .stage{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
 .stage span{padding:5px 10px;border-radius:999px;background:var(--bg2);border:1px solid var(--line);font-size:12px}
 .offline{padding:30px;text-align:center;color:var(--mute)}
+.slot{cursor:pointer}.slot:hover{border-color:#46607f}.slot.pick{border-color:var(--acc2);box-shadow:0 0 0 1px var(--acc2) inset}
+#slotBar{display:none;margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg2)}
+.chain{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chain span{padding:5px 10px;border-radius:999px;background:#1f2a36;border:1px solid #33465c;font-size:12px}
+.chain span:last-child{background:#1f4d3a;border-color:#2b9b6e}
+.chain i{color:var(--mute);font-style:normal}
+#thoughts{max-height:46vh;overflow:auto;display:flex;flex-direction:column;gap:6px}
+.th{display:flex;gap:8px;align-items:flex-start;font-size:13px;padding:7px 9px;border-radius:9px;background:var(--bg2);border:1px solid var(--line)}
+.th time{color:var(--mute);font:11px ui-monospace,Consolas,monospace;flex:none;margin-top:2px}
+.badge{flex:none;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:2px 7px;border-radius:999px;background:#2a3442;color:var(--mute)}
+.badge.inventaire{background:#3b2f14;color:var(--warn)}.badge.eau{background:#13324a;color:var(--acc2)}
+.badge.recette{background:#163a2b;color:var(--acc)}
+#plan{font:13px/1.6 ui-monospace,Consolas,monospace;white-space:pre-wrap;background:#0b0e12;border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:10px;min-height:60px}
+.pills{display:flex;gap:8px;flex-wrap:wrap}.pills span{padding:5px 10px;border-radius:9px;background:var(--bg2);border:1px solid var(--line);font-size:12px}
 @media (max-width:760px){
   .layout{flex-direction:column}
   nav{width:auto;display:flex;overflow-x:auto;gap:6px;border-right:0;border-bottom:1px solid var(--line)}
@@ -89,6 +103,7 @@ td,th{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left}
 <div class="layout">
 <nav id="nav">
   <button data-t="home" class="act">Accueil</button>
+  <button data-t="brain">Cerveau</button>
   <button data-t="map">Carte</button>
   <button data-t="mine">Minage</button>
   <button data-t="build">Constructions</button>
@@ -137,6 +152,47 @@ td,th{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left}
     <h3>Inventaire</h3>
     <div class="inv" id="inv"></div>
     <div class="row mute" style="margin-top:8px;font-size:12px" id="armor"></div>
+    <div id="slotBar" class="row">
+      <b id="slotName"></b>
+      <button onclick="slotAct('main')">Mettre en main</button>
+      <button onclick="slotPlan()">Comment en avoir plus ?</button>
+      <button class="bad" onclick="slotAct('jeter')">Jeter</button>
+      <button onclick="S.slot=-1;$('slotBar').style.display='none';refresh()">Fermer</button>
+    </div>
+    <div class="row" style="margin-top:10px"><button onclick="cmd('ranger')">Le bot range l'inventaire</button><span class="mute" style="font-size:12px">Clique sur une case pour agir dessus.</span></div>
+  </div>
+</section>
+
+<!-- CERVEAU -->
+<section class="tab" id="t-brain">
+  <h2>Cerveau</h2>
+  <div class="card" style="margin-bottom:14px">
+    <h3>Ce qu'il fait en ce moment</h3>
+    <div class="chain" id="chain"><span class="mute">Rien</span></div>
+    <div class="pills" style="margin-top:10px" id="brainInfo"></div>
+  </div>
+  <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(360px,1fr))">
+    <div class="card">
+      <h3>Ses raisonnements</h3>
+      <div id="thoughts"><div class="mute">Il n'a encore rien decide.</div></div>
+    </div>
+    <div class="card">
+      <h3>Comment obtenir un objet ?</h3>
+      <p class="mute" style="margin-top:0">Il connait toutes les recettes du jeu et de tes mods. Tape un nom (en francais ou en anglais).</p>
+      <div class="row">
+        <input id="pi" list="itemList" placeholder="ex : planches de bambou" style="flex:1" autocomplete="off">
+        <datalist id="itemList"></datalist>
+        <input id="pn" type="number" value="1" min="1" style="width:70px">
+        <button onclick="loadPlan()">Comment ?</button>
+      </div>
+      <div id="plan" class="mute">Le plan s'affichera ici.</div>
+      <div class="row" style="margin-top:10px"><button class="pri" id="planGo" onclick="planGo()" disabled>Va le chercher</button></div>
+    </div>
+    <div class="card">
+      <h3>Voyage en bateau</h3>
+      <p class="mute" style="margin-top:0">Normalement automatique quand il y a beaucoup d'eau. Ici tu peux le forcer.</p>
+      <div class="row"><input id="bx" placeholder="X" style="width:90px"><input id="bz" placeholder="Z" style="width:90px"><button onclick="if(val('bx')&&val('bz'))cmd('bateau '+val('bx')+' '+val('bz'))">Y aller en bateau</button></div>
+    </div>
   </div>
 </section>
 
@@ -266,7 +322,7 @@ async function j(u){const r=await fetch(u);return r.json();}
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('nav button').forEach(x=>x.classList.remove('act'));b.classList.add('act');
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('show'));$('t-'+b.dataset.t).classList.add('show');
-  ({map:loadMap,build:loadSchems,feat:loadFeats,wp:loadWp,console:loadLog,settings:loadSettings})[b.dataset.t]?.();
+  ({brain:loadBrain,map:loadMap,build:loadSchems,feat:loadFeats,wp:loadWp,console:loadLog,settings:loadSettings})[b.dataset.t]?.();
   try{localStorage.setItem('nb-tab',b.dataset.t)}catch(e){}
 });
 try{const t=localStorage.getItem('nb-tab');if(t)document.querySelector(`nav button[data-t="${t}"]`)?.click()}catch(e){}
@@ -289,10 +345,47 @@ async function refresh(){
   $('stats').innerHTML=`<span>Blocs mines</span><span>${st.mined}</span><span>Distance</span><span>${st.distance} m</span><span>Monstres tues</span><span>${st.kills}</span>
   <span>Morts</span><span>${st.deaths}</span><span>Taches finies</span><span>${st.tasks}</span><span>Vitesse</span><span>${st.speed} b/s</span><span>Session</span><span>${Math.floor(st.seconds/60)} min</span>`;
   const order=[...Array(27).keys()].map(i=>i+9).concat([...Array(9).keys()]);
-  $('inv').innerHTML=order.map(i=>{const it=s.inventory[i]||{};return `<div class="slot ${i===s.selected?'sel':''}" title="${esc(it.name||'')}">${it.name?esc(short(it.name)).slice(0,22):''}${it.count>1?`<span class="n">${it.count}</span>`:''}${it.dur!==undefined?`<span class="d" style="width:${Math.round(it.dur*90)}%;background:${it.dur<.2?'var(--bad)':'var(--acc)'}"></span>`:''}</div>`}).join('');
+  S.inv=s.inventory;
+  if(S.slot>=0){const it=s.inventory[S.slot]||{};if(!it.name){S.slot=-1;$('slotBar').style.display='none'}else $('slotName').textContent=(it.count>1?it.count+'x ':'')+it.name;}
+  $('inv').innerHTML=order.map(i=>{const it=s.inventory[i]||{};return `<div class="slot ${i===s.selected?'sel':''} ${i===S.slot?'pick':''}" onclick="pickSlot(${i})" title="${esc(it.name||'')}">${it.name?esc(short(it.name)).slice(0,22):''}${it.count>1?`<span class="n">${it.count}</span>`:''}${it.dur!==undefined?`<span class="d" style="width:${Math.round(it.dur*90)}%;background:${it.dur<.2?'var(--bad)':'var(--acc)'}"></span>`:''}</div>`}).join('');
   $('armor').textContent='Armure : '+s.armorItems.map(a=>a.name||'-').reverse().join(' / ')+'  |  Main gauche : '+(s.offhand.name||'-');
   S.path=s.path||[];S.pos=s;
 }
+// ----- cases de l'inventaire
+S.slot=-1;
+function pickSlot(i){const it=(S.inv||[])[i]||{};if(!it.name)return;S.slot=i;$('slotBar').style.display='flex';$('slotName').textContent=(it.count>1?it.count+'x ':'')+it.name;refresh();}
+function slotAct(a){if(S.slot<0)return;if(a==='jeter'&&!confirm('Jeter '+$('slotName').textContent+' ?'))return;cmd('slot '+a+' '+S.slot);if(a==='jeter'){S.slot=-1;$('slotBar').style.display='none'}}
+function slotPlan(){const it=(S.inv||[])[S.slot]||{};if(!it.rid)return;document.querySelector('nav button[data-t="brain"]').click();$('pi').value=it.rid;loadPlan();}
+// ----- cerveau
+async function loadBrain(){
+  let b;try{b=await j('/api/brain')}catch(e){return}
+  $('chain').innerHTML=b.chain.length?b.chain.map(c=>`<span>${esc(c)}</span>`).join('<i>&rsaquo;</i>'):'<span class="mute">Il ne fait rien. Donne-lui une tache !</span>';
+  const info=[];
+  if(b.free!==undefined)info.push(`Cases libres : <b>${b.free}</b>/36`);
+  if(b.sorting)info.push('<b class="ok">Range l\'inventaire...</b>');
+  if(b.recipes!==undefined)info.push(`Recettes connues : <b>${b.recipes}</b>`);
+  if(b.dropIndex)info.push(`Index des blocs : <b>${esc(b.dropIndex)}</b>`);
+  if(b.boat)info.push('<b style="color:var(--acc2)">En bateau</b>');
+  else if(b.inWater)info.push(`Dans l'eau, air : <b>${Math.max(0,Math.round(b.air/3))}%</b>`);
+  if(b.paused)info.push('<b style="color:var(--warn)">En pause</b>');
+  $('brainInfo').innerHTML=info.map(x=>`<span>${x}</span>`).join('');
+  if(b.counter===S.brainC)return;S.brainC=b.counter;
+  $('thoughts').innerHTML=b.thoughts.length?b.thoughts.slice().reverse().map(t=>`<div class="th"><time>${esc(t.t)}</time><span class="badge ${esc(t.k)}">${esc(t.k)}</span><span>${esc(t.m)}</span></div>`).join(''):'<div class="mute">Il n\'a encore rien decide.</div>';
+}
+let itemTimer=null;
+$('pi').addEventListener('input',()=>{clearTimeout(itemTimer);itemTimer=setTimeout(async()=>{
+  const q=val('pi');if(q.length<2)return;let l;try{l=await j('/api/items?q='+encodeURIComponent(q))}catch(e){return}
+  $('itemList').innerHTML=l.map(i=>`<option value="${esc(i.id)}">${esc(i.name)}${i.have?' ('+i.have+' sur toi)':''}</option>`).join('');
+},250)});
+$('pi').addEventListener('keydown',e=>{if(e.key==='Enter')loadPlan()});
+async function loadPlan(){
+  const id=val('pi');if(!id)return;$('plan').textContent='Je reflechis...';
+  let p;try{p=await j('/api/plan?item='+encodeURIComponent(id)+'&n='+(+val('pn')||1))}catch(e){$('plan').textContent='Minecraft ne repond pas.';return}
+  if(p.error){$('plan').textContent=p.error;$('planGo').disabled=true;return}
+  S.planId=p.id;$('planGo').disabled=!p.possible;
+  $('plan').innerHTML=`<b>${esc(p.name)}</b> <span class="mute">(${esc(p.id)}, tu en as ${p.have})</span>\n`+(p.possible?'':'<span class="ko">Il ne sait pas l\'obtenir tout seul.</span>\n')+p.lines.map(esc).join('\n');
+}
+function planGo(){if(S.planId)cmd('recolter '+S.planId+' '+(+val('pn')||1));}
 // ----- log
 async function loadLog(){
   const d=await j('/api/log');if(d.counter===S.lastLog)return;S.lastLog=d.counter;
@@ -381,6 +474,7 @@ async function loadSettings(){
 refresh();loadLog();
 setInterval(refresh,1000);setInterval(loadLog,1500);
 setInterval(()=>{if($('t-map').classList.contains('show')&&$('mapAuto').checked)loadMap()},2500);
+setInterval(()=>{if($('t-brain').classList.contains('show'))loadBrain()},1200);
 </script>
 </body>
 </html>

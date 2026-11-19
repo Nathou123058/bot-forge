@@ -22,6 +22,7 @@ public class GotoTask extends Task {
     private final int maxFails;
     public boolean quiet = false;
     private Consumer<AStar.Ctx> ctxTweak;
+    private int boatCheck = 0;
 
     public GotoTask(Goal goal) {
         this(goal, 8);
@@ -68,6 +69,15 @@ public class GotoTask extends Task {
         }
         if (search == null) {
             if (!mc.player.onGround() && !mc.player.isInWater() && !mc.player.onClimbable()) return Status.RUNNING;
+            if (boatCheck-- <= 0) {
+                boatCheck = 60;
+                int[] t = targetXZ();
+                if (t != null && BoatTask.worthIt(t[0], t[1])) {
+                    fr.nathvavan.nathbot.util.Brain.think("eau", "Beaucoup d'eau entre moi et la destination : plus rapide en bateau.");
+                    run(new BoatTask(t[0], t[1]));
+                    return Status.RUNNING;
+                }
+            }
             AStar.Ctx ctx = PathService.defaultCtx();
             if (ctxTweak != null) ctxTweak.accept(ctx);
             search = PathService.start(feet, goal, ctx);
@@ -93,6 +103,19 @@ public class GotoTask extends Task {
         Bot.I.renderPath = p;
         Bot.I.renderIdx = 0;
         return Status.RUNNING;
+    }
+
+    /** Destination X/Z si l'objectif en a une. */
+    private int[] targetXZ() {
+        if (goal instanceof Goal.Block b) return new int[]{b.x(), b.z()};
+        if (goal instanceof Goal.XZ g) return new int[]{g.x(), g.z()};
+        if (goal instanceof Goal.Near n) return new int[]{n.x(), n.z()};
+        return null;
+    }
+
+    @Override
+    protected void onChildDone(Task child, Status result) {
+        if (child instanceof BoatTask && result == Status.FAILED) boatCheck = 20 * 120; // on nage, tant pis
     }
 
     @Override

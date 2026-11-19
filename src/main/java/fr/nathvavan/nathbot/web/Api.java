@@ -91,6 +91,16 @@ final class Api {
                 return Response.json(a);
             }
             case "/api/settings" -> { return Response.json(onGame(Api::settings)); }
+            case "/api/brain" -> { return Response.json(onGame(Api::brain)); }
+            case "/api/items" -> {
+                String qq = q.getOrDefault("q", "");
+                return Response.json(onGame(() -> items(qq)));
+            }
+            case "/api/plan" -> {
+                String id = q.getOrDefault("item", "");
+                int n = Math.max(1, Math.min(2304, parseInt(q.getOrDefault("n", "1"), 1)));
+                return Response.json(onGame(() -> plan(id, n)));
+            }
             case "/api/cmd" -> {
                 if (!method.equals("POST")) return Response.text(405, "POST uniquement");
                 String cmd = body.trim();
@@ -166,9 +176,91 @@ final class Api {
         return o;
     }
 
+    private static int parseInt(String s, int def) {
+        try { return Integer.parseInt(s.trim()); } catch (Exception e) { return def; }
+    }
+
+    private static JsonObject brain() {
+        JsonObject o = new JsonObject();
+        o.addProperty("counter", fr.nathvavan.nathbot.util.Brain.counter());
+        JsonArray th = new JsonArray();
+        for (var t : fr.nathvavan.nathbot.util.Brain.all()) {
+            JsonObject x = new JsonObject();
+            x.addProperty("t", t.time());
+            x.addProperty("k", t.kind());
+            x.addProperty("m", t.text());
+            th.add(x);
+        }
+        o.add("thoughts", th);
+        JsonArray chain = new JsonArray();
+        if (Bot.I.task() != null) for (String part : Bot.I.task().describe().split(" > ")) chain.add(part);
+        o.add("chain", chain);
+        o.addProperty("paused", Bot.I.paused);
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null && mc.level != null) {
+            o.addProperty("free", Inv.freeSlots());
+            o.addProperty("sorting", fr.nathvavan.nathbot.util.InvManager.busy());
+            o.addProperty("recipes", fr.nathvavan.nathbot.util.RecipeBook.recipeCount());
+            o.addProperty("dropIndex", fr.nathvavan.nathbot.util.DropIndex.progressText());
+            o.addProperty("air", mc.player.getAirSupply());
+            o.addProperty("inWater", mc.player.isInWater());
+            o.addProperty("boat", mc.player.getVehicle() instanceof net.minecraft.world.entity.vehicle.Boat);
+        }
+        return o;
+    }
+
+    private static String norm(String s) {
+        return java.text.Normalizer.normalize(s.toLowerCase(java.util.Locale.ROOT), java.text.Normalizer.Form.NFD).replaceAll("\\p{M}", "");
+    }
+
+    private static JsonArray items(String q) {
+        JsonArray a = new JsonArray();
+        String k = norm(q.trim());
+        if (k.length() < 2) return a;
+        java.util.List<Item> exact = new java.util.ArrayList<>(), other = new java.util.ArrayList<>();
+        for (Item i : BuiltInRegistries.ITEM) {
+            if (i == net.minecraft.world.item.Items.AIR) continue;
+            String id = BuiltInRegistries.ITEM.getKey(i).toString();
+            String name;
+            try { name = norm(i.getDescription().getString()); } catch (Throwable t) { name = ""; }
+            if (name.startsWith(k) || id.contains(":" + k)) exact.add(i);
+            else if (name.contains(k) || id.contains(k)) other.add(i);
+            if (exact.size() >= 40) break;
+        }
+        exact.addAll(other);
+        for (Item i : exact) {
+            if (a.size() >= 40) break;
+            JsonObject o = new JsonObject();
+            o.addProperty("id", BuiltInRegistries.ITEM.getKey(i).toString());
+            o.addProperty("name", i.getDescription().getString());
+            o.addProperty("have", Inv.count(i));
+            a.add(o);
+        }
+        return a;
+    }
+
+    private static JsonObject plan(String id, int n) {
+        JsonObject o = new JsonObject();
+        Item it = Commands.parseItem(id);
+        if (it == null) {
+            o.addProperty("error", "Objet inconnu : " + id);
+            return o;
+        }
+        o.addProperty("id", BuiltInRegistries.ITEM.getKey(it).toString());
+        o.addProperty("name", it.getDescription().getString());
+        o.addProperty("have", Inv.count(it));
+        fr.nathvavan.nathbot.task.Planner pl = new fr.nathvavan.nathbot.task.Planner();
+        o.addProperty("possible", pl.plan(it).ok());
+        JsonArray lines = new JsonArray();
+        for (String l : pl.explain(it, n)) lines.add(l);
+        o.add("lines", lines);
+        return o;
+    }
+
     private static JsonObject stackJson(ItemStack s) {
         JsonObject o = new JsonObject();
         if (s.isEmpty()) return o;
+        o.addProperty("rid", BuiltInRegistries.ITEM.getKey(s.getItem()).toString());
         o.addProperty("id", BuiltInRegistries.ITEM.getKey(s.getItem()).getPath());
         o.addProperty("name", s.getHoverName().getString());
         o.addProperty("count", s.getCount());

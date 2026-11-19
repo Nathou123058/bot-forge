@@ -77,6 +77,8 @@ public final class Commands {
             new Help("manger", "Manger maintenant", "Divers"),
             new Help("dormir", "Aller dormir dans un lit", "Divers"),
             new Help("trier", "Trier l'inventaire", "Divers"),
+            new Help("ranger", "Le bot ouvre l'inventaire et range tout (barre rapide, piles, dechets)", "Divers"),
+            new Help("bateau <x> <z>", "Aller quelque part en bateau (il en fabrique un si besoin)", "Deplacement"),
             new Help("jeter <objet>", "Jeter tous les exemplaires d'un objet", "Divers"),
             new Help("wp ajouter|suppr|liste|suivre <nom>", "Points de passage", "Points"),
             new Help("sethome / home", "Definir / rejoindre la maison", "Points"),
@@ -348,6 +350,22 @@ public final class Commands {
                 }
                 case "dormir", "sleep" -> Bot.I.start(new MiscTasks.Sleep());
                 case "trier", "sort" -> sortInventory();
+                case "ranger", "organiser", "organize" -> {
+                    fr.nathvavan.nathbot.util.InvManager.requestOrganize();
+                    BotLog.info("Je range l'inventaire...");
+                }
+                case "bateau", "boat" -> {
+                    if (a.length < 3) { BotLog.error("Utilisation : bateau <x> <z>"); return; }
+                    Bot.I.start(new BoatTask(coord(a[1], feet.getX()), coord(a[2], feet.getZ())));
+                }
+                case "slot" -> {
+                    int i = intArg(a, 2, -1);
+                    if (a.length < 3 || i < 0 || i > 35) { BotLog.error("Utilisation : slot jeter|main <0-35>"); return; }
+                    var inv = mc.player.getInventory();
+                    if (a[1].equalsIgnoreCase("jeter")) Inv.click(Inv.menuSlotFor(i), 1, ClickType.THROW);
+                    else if (i < 9) inv.selected = i;
+                    else Inv.click(Inv.menuSlotFor(i), inv.selected, ClickType.SWAP);
+                }
                 case "jeter", "drop" -> {
                     Item it = a.length > 1 ? parseItem(a[1]) : null;
                     if (it == null) { BotLog.error("Objet inconnu."); return; }

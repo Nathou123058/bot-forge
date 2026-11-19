@@ -7,9 +7,19 @@ import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 
-/** Gestion de la camera du joueur (rotation vers une cible). */
+/**
+ * Gestion de la camera du joueur.
+ *
+ * Le bot ne "teleporte" plus sa camera : il donne une cible, et la camera s'en approche
+ * en douceur a chaque image (pas a chaque tick), avec une acceleration naturelle.
+ * Resultat : plus de rotation d'un seul coup, meme a 144 FPS.
+ */
 public final class Rot {
     private Rot() {}
+
+    private static float targetYaw, targetPitch;
+    private static int targetTick = -100;
+    private static long lastFrame = 0;
 
     public static float[] calc(Vec3 from, Vec3 to) {
         double dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
@@ -27,20 +37,55 @@ public final class Rot {
         return setRotation(r[0], r[1]);
     }
 
+    private static boolean smooth() { return BotConfig.get(BotConfig.SMOOTH_ROTATION, true); }
+
+    /** Fixe la direction voulue. Renvoie true si la camera y est deja (a 3 degres pres). */
     public static boolean setRotation(float yaw, float pitch) {
         LocalPlayer p = Minecraft.getInstance().player;
         if (p == null) return false;
-        float cy = p.getYRot(), cp = p.getXRot();
-        float dy = Mth.wrapDegrees(yaw - cy);
-        float dp = pitch - cp;
-        boolean smooth = BotConfig.get(BotConfig.SMOOTH_ROTATION, true);
-        float max = smooth ? 40f : 360f;
-        float sy = Mth.clamp(dy, -max, max);
-        float sp = Mth.clamp(dp, -max, max);
-        p.setYRot(cy + sy);
-        p.setXRot(Mth.clamp(cp + sp, -90f, 90f));
+        targetYaw = yaw;
+        targetPitch = Mth.clamp(pitch, -90f, 90f);
+        targetTick = p.tickCount;
+        if (!smooth()) {
+            apply(p, 1f, 100000f);
+            return true;
+        }
+        // si aucune image n'a ete dessinee depuis un moment (jeu reduit), on avance quand meme
+        if (System.nanoTime() - lastFrame > 120_000_000L) step(p, 0.05f);
+        float dy = Math.abs(Mth.wrapDegrees(targetYaw - p.getYRot()));
+        float dp = Math.abs(targetPitch - p.getXRot());
+        return dy < 3f && dp < 3f;
+    }
+
+    /** Appele a chaque image : rapproche la camera de la cible. */
+    public static void frame() {
+        LocalPlayer p = Minecraft.getInstance().player;
+        long now = System.nanoTime();
+        float dt = lastFrame == 0 ? 0.016f : Math.min(0.1f, (now - lastFrame) / 1e9f);
+        lastFrame = now;
+        if (p == null || !smooth()) return;
+        step(p, dt);
+    }
+
+    private static void step(LocalPlayer p, float dt) {
+        if (p.tickCount - targetTick > 2) return; // plus de cible : la souris est au joueur
+        // vitesse proportionnelle a l'ecart (acceleration / freinage), bornee
+        float alpha = 1f - (float) Math.exp(-dt * 13f);
+        apply(p, alpha, 720f * dt + 0.0001f);
+    }
+
+    private static void apply(LocalPlayer p, float alpha, float maxStep) {
+        float dy = Mth.wrapDegrees(targetYaw - p.getYRot());
+        float dp = targetPitch - p.getXRot();
+        float minStep = Math.min(maxStep, 0.9f); // evite de "ramper" sur les derniers degres
+        float sy = dy * alpha, sp = dp * alpha;
+        if (Math.abs(sy) < minStep) sy = Math.copySign(Math.min(Math.abs(dy), minStep), dy);
+        if (Math.abs(sp) < minStep) sp = Math.copySign(Math.min(Math.abs(dp), minStep), dp);
+        sy = Mth.clamp(sy, -maxStep, maxStep);
+        sp = Mth.clamp(sp, -maxStep, maxStep);
+        p.setYRot(p.getYRot() + sy);
+        p.setXRot(Mth.clamp(p.getXRot() + sp, -90f, 90f));
         p.setYHeadRot(p.getYRot());
-        return Math.abs(dy - sy) < 0.01f && Math.abs(dp - sp) < 0.01f || (Math.abs(dy) < 3f && Math.abs(dp) < 3f);
     }
 
     /** Oriente uniquement le lacet (pour marcher). */

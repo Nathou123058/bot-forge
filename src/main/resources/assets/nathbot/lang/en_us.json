@@ -1,0 +1,13 @@
+{
+  "key.categories.nathbot": "NathBot",
+  "key.nathbot.panel": "Open bot panel",
+  "key.nathbot.stop": "Stop bot",
+  "key.nathbot.pause": "Pause / resume bot",
+  "key.nathbot.web": "Open local web panel",
+  "key.nathbot.zoom": "Zoom",
+  "key.nathbot.diamonds": "Find diamonds",
+  "key.nathbot.finish": "Beat the game",
+  "key.nathbot.ore_esp": "Ore finder (toggle)",
+  "key.nathbot.fullbright": "Night vision (toggle)",
+  "key.nathbot.come": "Bot: come here"
+}

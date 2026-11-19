@@ -1,0 +1,27 @@
+modLoader="javafml"
+loaderVersion="[47,)"
+license="MIT"
+
+[[mods]]
+modId="nathbot"
+version="${version}"
+displayName="NathBot"
+authors="Nath et Vavan"
+displayTest="IGNORE_ALL_VERSION"
+description='''
+Bot autonome 100% maison (sans Baritone) : pathfinding A*, minage automatique (diamants...), constructions predefinies, mode "finir le jeu", panneau web local (touche P) et plus de 50 fonctions.
+'''
+
+[[dependencies.nathbot]]
+modId="forge"
+mandatory=true
+versionRange="[47,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.nathbot]]
+modId="minecraft"
+mandatory=true
+versionRange="[1.20.1,1.20.2)"
+ordering="NONE"
+side="BOTH"

@@ -1,28 +1,44 @@
-name: build
+name: Compiler NathBot
+
 on:
   push:
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Dezipper le projet
-        run: |
-          mkdir project
-          unzip -q "$(ls *.zip | head -1)" -d project
+
       - uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
+
       - uses: gradle/actions/setup-gradle@v4
+
+      - name: Compiler le mod
+        run: |
+          chmod +x ./gradlew
+          ./gradlew build --no-daemon
+
+      - name: Fichier .jar (onglet Actions > ce build > Artifacts)
+        uses: actions/upload-artifact@v4
         with:
-          gradle-version: '8.8'
-      - name: Compiler
-        run: gradle build --no-daemon
-        working-directory: project
-      - uses: actions/upload-artifact@v4
+          name: nathbot-jar
+          path: build/libs/*.jar
+
+      - name: Publier le .jar dans "Releases" (lien de telechargement direct)
+        if: github.ref == 'refs/heads/nathbot' || github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
         with:
-          name: baritoneui-jar
-          path: project/build/libs/*.jar
+          tag_name: nathbot-latest
+          name: NathBot (derniere version)
+          body: |
+            Mod Forge 1.20.1. Telecharge le .jar ci-dessous et mets-le dans le dossier `mods`
+            de ton instance CurseForge (clic droit sur l'instance > Open Folder > mods).
+          files: build/libs/*.jar
+          make_latest: true

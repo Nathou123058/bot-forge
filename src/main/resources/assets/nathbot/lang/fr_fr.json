@@ -1,0 +1,13 @@
+{
+  "key.categories.nathbot": "NathBot",
+  "key.nathbot.panel": "Ouvrir le panneau du bot",
+  "key.nathbot.stop": "Arreter le bot",
+  "key.nathbot.pause": "Pause / reprendre le bot",
+  "key.nathbot.web": "Ouvrir le site web local",
+  "key.nathbot.zoom": "Zoom",
+  "key.nathbot.diamonds": "Chercher des diamants",
+  "key.nathbot.finish": "Finir le jeu",
+  "key.nathbot.ore_esp": "Detecteur de minerais (on/off)",
+  "key.nathbot.fullbright": "Vision nocturne (on/off)",
+  "key.nathbot.come": "Bot : viens ici"
+}

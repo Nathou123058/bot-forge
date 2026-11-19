@@ -250,7 +250,7 @@ public final class Commands {
                         if (s.ok()) BotLog.ok(s.file() + " : ok (" + s.commands() + " commande(s), " + s.handlers() + " evenement(s))");
                         else BotLog.error(s.file() + " : " + s.error());
                     }
-                    for (String[] c : fr.nathvavan.nathbot.dev.Scripts.commands()) BotLog.info("/nb " + c[0] + " : " + c[1] + " (" + c[2] + ")");
+                    for (String[] sc : fr.nathvavan.nathbot.dev.Scripts.commands()) BotLog.info("/nb " + sc[0] + " : " + sc[1] + " (" + sc[2] + ")");
                 }
                 case "dev" -> {
                     if (a.length > 1 && a[1].equalsIgnoreCase("forcer")) {

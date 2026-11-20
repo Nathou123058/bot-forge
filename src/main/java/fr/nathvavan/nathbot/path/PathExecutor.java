@@ -156,6 +156,23 @@ public final class PathExecutor {
                 && (s.move() == Path.Move.TRAVERSE || s.move() == Path.Move.DIAGONAL) && !s.placeFloor() && nextIsStraight()) {
             in.sprint = true;
         }
+        // technique de speedrunner : sprint + saut sur les longues lignes droites (~30 % plus rapide)
+        if (in.sprint && p.onGround() && !in.jump && fr.nathvavan.nathbot.task.SpeedrunTask.isRunning() && longStraight()) in.jump = true;
+    }
+
+    /** Les 4 prochains pas vont tout droit, a plat, avec de la place au-dessus de la tete pour sauter. */
+    private boolean longStraight() {
+        if (idx + 4 >= path.steps.size()) return false;
+        Path.Step a = path.steps.get(idx);
+        int dx = a.to().getX() - a.from().getX(), dz = a.to().getZ() - a.from().getZ();
+        for (int k = idx; k < idx + 4; k++) {
+            Path.Step st = path.steps.get(k);
+            if (st.move() != Path.Move.TRAVERSE || st.placeFloor() || !st.toBreak().isEmpty()) return false;
+            if (st.to().getX() - st.from().getX() != dx || st.to().getZ() - st.from().getZ() != dz) return false;
+            if (st.to().getY() != a.from().getY()) return false;
+            if (!WV.passable(st.to().above(2)) || !WV.passable(st.from().above(2))) return false;
+        }
+        return true;
     }
 
     private float aimPitch(LocalPlayer p) {

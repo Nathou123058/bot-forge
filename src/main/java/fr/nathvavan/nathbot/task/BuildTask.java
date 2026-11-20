@@ -44,6 +44,8 @@ public class BuildTask extends Task {
     private int passes = 0;
     private BlockPos current;
     private int gatherTries = 0;
+    private List<Item> prep;
+    private boolean prepDone = false;
 
     public BuildTask(Schematic schem, BlockPos origin, boolean commands) {
         this.schem = schem;
@@ -61,6 +63,31 @@ public class BuildTask extends Task {
                 .thenComparingInt(p -> attachLater(target.get(p)) ? 1 : 0)
                 .thenComparingDouble(p -> p.distSqr(origin)));
         WV.protectedPositions = prot;
+    }
+
+    /** Liste des materiaux manquants que le bot sait obtenir (bois et pierre d'abord, ils servent aux autres). */
+    private List<Item> planMaterials() {
+        List<Item> ok = new ArrayList<>();
+        StringBuilder want = new StringBuilder(), unknown = new StringBuilder();
+        for (Item it : schem.materials().keySet()) {
+            int need = countRemaining(it);
+            int have = Inv.count(it);
+            if (need <= have) continue;
+            if (GatherTask.canGather(it)) {
+                ok.add(it);
+                want.append(need - have).append("x ").append(it.getDescription().getString()).append(", ");
+            } else unknown.append(it.getDescription().getString()).append(", ");
+        }
+        ok.sort(Comparator.comparingInt(i -> {
+            ItemStack s = new ItemStack(i);
+            if (s.is(net.minecraft.tags.ItemTags.LOGS)) return 0;
+            if (s.is(net.minecraft.tags.ItemTags.PLANKS)) return 1;
+            if (i == Items.COBBLESTONE || i == Items.STONE || i == Items.SAND) return 2;
+            return 3;
+        }));
+        if (want.length() > 0) BotLog.info("Pour " + schem.name + ", il me manque : " + want + "je vais tout chercher et fabriquer avant de construire.");
+        if (unknown.length() > 0) BotLog.warn("Je ne sais pas obtenir tout seul : " + unknown + "je ferai sans.");
+        return ok;
     }
 
     private static boolean attachLater(BlockState s) {
@@ -109,6 +136,20 @@ public class BuildTask extends Task {
         }
 
         // ---------------- mode survie / creatif
+        // 1re etape : faire la liste de tout ce qui manque et tout aller chercher / fabriquer d'un coup
+        if (!prepDone && !mc.player.getAbilities().instabuild && BotConfig.get(BotConfig.AUTO_GATHER_MATERIALS, true)) {
+            if (prep == null) prep = planMaterials();
+            while (!prep.isEmpty()) {
+                Item it = prep.remove(0);
+                int need = countRemaining(it);
+                if (Inv.count(it) >= need) continue;
+                status = "materiaux : " + it.getDescription().getString();
+                run(new GatherTask(it, Math.min(need, 64 * 9)));
+                return Status.RUNNING;
+            }
+            prepDone = true;
+            BotLog.info("Materiaux prets, je construis.");
+        }
         BlockPos next = findNext();
         if (next == null) {
             if (!skipped.isEmpty() && passes < 3) {

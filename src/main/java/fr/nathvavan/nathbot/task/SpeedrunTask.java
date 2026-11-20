@@ -52,6 +52,22 @@ public class SpeedrunTask extends Task {
     private int failures = 0;
     private BlockPos portalOrigin;
     private ResourceKey<Level> lastDim;
+    // techniques "pro"
+    private Item pendingTool, pendingCook, pendingArmor;
+    private boolean toolInterrupt = false;
+    private int blockTries = 0;
+    private static long lastActiveTick = -1000;
+
+    /** Vrai pendant que "Finir le jeu" tourne (active le sprint saute). */
+    public static boolean isRunning() {
+        var mc = net.minecraft.client.Minecraft.getInstance();
+        return mc.level != null && mc.level.getGameTime() - lastActiveTick < 10;
+    }
+
+    private static void markActive() {
+        var mc = net.minecraft.client.Minecraft.getInstance();
+        if (mc.level != null) lastActiveTick = mc.level.getGameTime();
+    }
 
     @Override
     public String name() { return "Finir le jeu [" + stage + "]"; }
@@ -73,7 +89,28 @@ public class SpeedrunTask extends Task {
     }
 
     @Override
+    protected boolean shouldInterruptChild(Task child) {
+        markActive();
+        // pioche presque cassee en plein minage : on s'arrete, on en refait une, on reprend
+        if (ticks % 40 == 0 && pendingTool == null && mc.level.dimension() != Level.END
+                && (child instanceof MineTask || child instanceof GatherTask || child instanceof Obsidian)) {
+            if (ProTools.replacementNeeded() != null) {
+                toolInterrupt = true;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
     protected void onChildDone(Task child, Status result) {
+        if (toolInterrupt) {
+            toolInterrupt = false; // pas un echec : on a juste coupe pour refaire un outil
+            return;
+        }
+        if (pendingTool != null) { if (result == Status.FAILED) ProTools.markFailed(pendingTool); pendingTool = null; }
+        if (pendingCook != null) { if (result == Status.FAILED) ProTools.markFailed(pendingCook); pendingCook = null; }
+        if (pendingArmor != null) { if (result == Status.FAILED) ProTools.markFailed(pendingArmor); pendingArmor = null; }
         if (result == Status.FAILED) {
             failures++;
             BotLog.warn("Etape '" + stage + "' ratee (" + failures + "), on retente.");
@@ -82,6 +119,7 @@ public class SpeedrunTask extends Task {
 
     @Override
     protected Status update() {
+        markActive();
         if (ticks == 1) {
             Features.set("auto_eat", true);
             Features.set("kill_aura", true);
@@ -102,6 +140,12 @@ public class SpeedrunTask extends Task {
         lastDim = dim;
 
         if (dim == Level.END) return go("combat contre le dragon", new Dragon());
+        // outil presque casse sans rechange : on en refait un tout de suite (meilleur niveau possible)
+        Item tool = ProTools.replacementNeeded();
+        if (tool != null) {
+            pendingTool = tool;
+            return go("nouvel outil : " + tool.getDescription().getString(), new GatherTask(tool, Inv.count(tool) + 1));
+        }
         if (dim == Level.NETHER) return nether();
         return overworld();
     }
@@ -147,13 +191,35 @@ public class SpeedrunTask extends Task {
         if (GatherTask.pickTier() < 3) return go("pioche en fer", new ContainerTasks.Craft(Items.IRON_PICKAXE, 1));
         if (!Inv.has(Items.IRON_SWORD) && !Inv.has(Items.DIAMOND_SWORD)) return go("epee en fer", new ContainerTasks.Craft(Items.IRON_SWORD, 1));
         if (!Inv.has(Items.BUCKET) && !Inv.has(Items.WATER_BUCKET)) return go("seau", new ContainerTasks.Craft(Items.BUCKET, 1));
+        // viande crue -> cuite : deux fois plus nourrissante
+        Item[] meat = ProTools.meatToCook();
+        if (meat != null && Inv.count(meat[1]) < 24) {
+            pendingCook = meat[1];
+            fr.nathvavan.nathbot.util.Brain.think("nourriture", "J'ai " + Inv.count(meat[0]) + " viandes crues : je les cuis, ca nourrit deux fois plus.");
+            return go("cuire la viande", new GatherTask(meat[1], Inv.count(meat[1]) + Inv.count(meat[0])));
+        }
         if (GatherTask.pickTier() < 4) {
             if (Inv.count(Items.DIAMOND) < 3) return go("diamants (" + Inv.count(Items.DIAMOND) + "/3)", new GatherTask(Items.DIAMOND, 3));
             return go("pioche en diamant", new ContainerTasks.Craft(Items.DIAMOND_PICKAXE, 1));
         }
+        // armure en fer complete avant le Nether (un bot n'esquive pas : l'armure le garde en vie)
+        Item piece = ProTools.nextArmorPiece();
+        if (piece != null) {
+            pendingArmor = piece;
+            int need = ProTools.ironFor(piece);
+            if (Inv.count(Items.IRON_INGOT) < need)
+                return go("fer pour l'armure (" + Inv.count(Items.IRON_INGOT) + "/" + need + ")", new GatherTask(Items.IRON_INGOT, need));
+            return go("armure : " + piece.getDescription().getString(), new GatherTask(piece, 1));
+        }
         if (!Inv.has(Items.FLINT_AND_STEEL)) {
             if (!Inv.has(Items.FLINT)) return go("silex", new GatherTask(Items.FLINT, 1));
             return go("briquet", new ContainerTasks.Craft(Items.FLINT_AND_STEEL, 1));
+        }
+        // de quoi faire des ponts au-dessus de la lave dans le Nether
+        if (Inv.throwawayCount() < 64 && blockTries < 3) {
+            blockTries++;
+            return go("blocs pour le Nether (" + Inv.throwawayCount() + "/64)",
+                    new GatherTask(Items.COBBLESTONE, Inv.count(Items.COBBLESTONE) + 64 - Inv.throwawayCount()));
         }
         // portail deja construit ?
         BlockPos portal = Scanner.nearest(s -> s.is(Blocks.NETHER_PORTAL), Bot.feet(), 4);

@@ -458,6 +458,8 @@ public final class Features {
                 }
             }
         });
+        add(new Feature("survival_reflex", "Reflexe de survie", "Survie", true,
+                "Vie basse pendant une tache : au lieu de s'arreter, le bot creuse un trou, se couvre, mange et attend d'etre soigne.") {});
         add(new Feature("auto_boat", "Bateau automatique", "Deplacement", true, "Pour traverser beaucoup d'eau, le bot fabrique un bateau, navigue puis le recupere.") {});
         add(new Feature("no_pause", "Pas de pause hors focus", "Bot", true, "Le jeu ne se met pas en pause quand tu vas sur le site web.") {
             @Override

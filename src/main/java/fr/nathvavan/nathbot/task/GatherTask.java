@@ -35,6 +35,14 @@ public class GatherTask extends Task {
     private Planner.Plan current;
     private MineTask mining;
     private int haveBeforeMine;
+    private final java.util.Map<Object, Integer> recipeFails = new java.util.HashMap<>();
+
+    /** Etabli / four / tailleur a portee ou dans l'inventaire ? */
+    private static boolean stationReady(Item item, net.minecraft.world.level.block.Block block) {
+        if (Inv.has(item)) return true;
+        net.minecraft.core.BlockPos t = fr.nathvavan.nathbot.util.Scanner.nearest(s -> s.is(block), fr.nathvavan.nathbot.bot.Bot.feet(), 2);
+        return t != null && t.distSqr(fr.nathvavan.nathbot.bot.Bot.feet()) <= 24 * 24;
+    }
 
     public GatherTask(Item item, int targetTotal) {
         this.item = item;
@@ -225,6 +233,22 @@ public class GatherTask extends Task {
             }
             case RECIPE -> {
                 RecipeBook.Source s = p.source();
+                // la station D'ABORD : sinon fabriquer l'etabli mange les planches prevues pour l'objet
+                if (s.kind() == RecipeBook.Kind.CRAFT && s.needsTable() && item != Items.CRAFTING_TABLE && !stationReady(Items.CRAFTING_TABLE, Blocks.CRAFTING_TABLE)) {
+                    status = "etabli d'abord";
+                    run(new GatherTask(Items.CRAFTING_TABLE, 1));
+                    return Status.RUNNING;
+                }
+                if (s.kind() == RecipeBook.Kind.SMELT && item != Items.FURNACE && !stationReady(Items.FURNACE, Blocks.FURNACE)) {
+                    status = "four d'abord";
+                    run(new GatherTask(Items.FURNACE, 1));
+                    return Status.RUNNING;
+                }
+                if (s.kind() == RecipeBook.Kind.STONECUT && !stationReady(Items.STONECUTTER, Blocks.STONECUTTER)) {
+                    status = "tailleur de pierre d'abord";
+                    run(new GatherTask(Items.STONECUTTER, 1));
+                    return Status.RUNNING;
+                }
                 int crafts = (int) Math.ceil(n / (double) s.outCount());
                 for (Map.Entry<Ingredient, Integer> e : RecipeBook.grouped(s.ingredients())) {
                     int needed = crafts * e.getValue();
@@ -243,6 +267,10 @@ public class GatherTask extends Task {
                 return Status.RUNNING;
             }
             default -> {
+                if (!failed.isEmpty()) {
+                    BotLog.warn("Je n'arrive pas a obtenir " + label + " : toutes les facons connues ont echoue plusieurs fois.");
+                    return Status.FAILED;
+                }
                 BotLog.warn("Je ne sais pas comment obtenir " + label + " : aucune recette ni aucun bloc connu ("
                         + RecipeBook.recipeCount() + " recettes connues, index des blocs " + DropIndex.progressText() + ").");
                 return Status.FAILED;
@@ -252,6 +280,11 @@ public class GatherTask extends Task {
 
     /** Cuire au four, en allant chercher du combustible si besoin. */
     private Status smelt(Ingredient input) {
+        if (item != Items.FURNACE && !stationReady(Items.FURNACE, Blocks.FURNACE)) {
+            status = "four d'abord";
+            run(new GatherTask(Items.FURNACE, 1));
+            return Status.RUNNING;
+        }
         if (Inv.count(st -> ContainerTasks.Smelt.isFuel(st) && !input.test(st)) == 0) {
             status = "combustible";
             run(new MineTask(Targets.parse("wood"), 0).until(() -> Inv.count(GatherTask::isLog) >= 3));
@@ -274,7 +307,9 @@ public class GatherTask extends Task {
         }
         if (result != Status.FAILED || current == null || current.source() == null) return;
         if (child instanceof ContainerTasks.Craft || child instanceof ContainerTasks.Smelt || child instanceof ContainerTasks.Stonecut) {
-            failed.add(current.source().recipe()); // on essaiera une autre recette
+            // un echec peut venir d'un ingredient utilise entre-temps : on retente avant d'ecarter la recette
+            int n = recipeFails.merge(current.source().recipe(), 1, Integer::sum);
+            if (n >= 3) failed.add(current.source().recipe()); // on essaiera une autre recette
         }
     }
 }

@@ -22,6 +22,9 @@ public final class Bot {
     public final ConcurrentLinkedQueue<String> commandQueue = new ConcurrentLinkedQueue<>();
 
     private Task task;
+    /** Tache d'urgence (reflexe de survie) qui passe avant la tache principale, puis lui rend la main. */
+    private Task emergency;
+    private int lastEmergencyEnd = -100000;
     public boolean paused;
     /** Une fonction (manger, MLG...) a pris la main ce tick : la tache attend. */
     public boolean featureBusy;
@@ -49,6 +52,7 @@ public final class Bot {
     public String statusText() {
         String dev = fr.nathvavan.nathbot.dev.DevMode.locked() ? "[Claude code le bot] " : "";
         if (task == null) return dev + "Inactif";
+        if (emergency != null) return dev + "[URGENCE] " + emergency.describe() + " (puis : " + task.name() + ")";
         return dev + (paused ? "[PAUSE] " : "") + task.describe();
     }
 
@@ -71,6 +75,10 @@ public final class Bot {
             } catch (Throwable ignored) {}
         }
         task = null;
+        if (emergency != null) {
+            try { emergency.stop(); } catch (Throwable ignored) {}
+        }
+        emergency = null;
         renderPath = null;
         WV.protectedPositions = java.util.Set.of();
     }
@@ -124,9 +132,34 @@ public final class Bot {
 
         // securite : vie basse
         int panic = BotConfig.get(BotConfig.PANIC_HEALTH, 5);
-        if (task != null && !paused && panic > 0 && p.getHealth() <= panic && p.getHealth() > 0) {
-            paused = true;
-            BotLog.error("Vie basse (" + (int) p.getHealth() + ") : bot en pause. Tape '/nb resume' pour reprendre.");
+        float hp = p.getHealth();
+        if (task != null && !paused && emergency == null && hp > 0) {
+            boolean reflex = Features.isOn("survival_reflex");
+            if (reflex && (hp <= Math.max(8, panic) && p.tickCount - lastEmergencyEnd > 20 * 30 || panic > 0 && hp <= panic)) {
+                // au lieu de rester plante : se mettre a l'abri, se soigner, puis reprendre
+                emergency = new fr.nathvavan.nathbot.task.Refuge();
+                releaseKeys();
+                BotLog.warn("Vie basse (" + (int) hp + ") : je me mets a l'abri pour me soigner, puis je reprends.");
+            } else if (!reflex && panic > 0 && hp <= panic) {
+                paused = true;
+                BotLog.error("Vie basse (" + (int) hp + ") : bot en pause. Tape '/nb resume' pour reprendre.");
+            }
+        }
+        if (emergency != null && !paused && !featureBusy && p.isAlive()) {
+            Task.Status es;
+            try {
+                es = emergency.tick();
+            } catch (Throwable t) {
+                fr.nathvavan.nathbot.NathBot.LOG.error("Erreur dans l'urgence", t);
+                es = Task.Status.FAILED;
+            }
+            if (es != Task.Status.RUNNING) {
+                emergency = null;
+                lastEmergencyEnd = p.tickCount;
+                if (es == Task.Status.SUCCESS) BotLog.ok("Remis sur pied, je reprends : " + (task != null ? task.name() : "rien"));
+            }
+            applyKeys(mc);
+            return;
         }
 
         if (task != null && !paused && !featureBusy && p.isAlive()) {
